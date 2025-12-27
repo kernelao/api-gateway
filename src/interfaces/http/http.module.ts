@@ -1,14 +1,11 @@
 import { Module } from '@nestjs/common';
-
+import { ApplicationModule } from '@/application/application.module';
 import { InfrastructureModule } from '@/infrastructure/infrastructure.module';
 
-import { HealthController } from '@/interfaces/http/health/health.controller';
-import { ProxyController } from '@/interfaces/http/proxy.controller';
-import { JwtAuthGuard } from './guards/JwtAuth.guard';
+import { ProxyController } from './proxy/Proxy.controller';
 
 @Module({
-  imports: [InfrastructureModule],
-  controllers: [HealthController, ProxyController],
-  providers: [JwtAuthGuard],
+  imports: [ApplicationModule, InfrastructureModule],
+  controllers: [ProxyController],
 })
 export class HttpModule {}

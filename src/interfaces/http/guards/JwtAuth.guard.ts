@@ -1,42 +1,47 @@
 import {
   CanActivate,
   ExecutionContext,
-  Inject,
   Injectable,
   UnauthorizedException,
+  Inject,
 } from '@nestjs/common';
-import type { JwtAccessClaims, JwtVerifierPort } from '@/../libs/shared-auth';
+import type { Request } from 'express';
+
+import type { AppRequest } from '@/interfaces/http/context/AppRequest';
+import { DI } from '@/application/shared/di';
+import type { JwtVerifierPort } from 'libs/shared-auth/jwt/JwtVerifier.port';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  constructor(@Inject('JwtVerifierPort') private readonly verifier: JwtVerifierPort) {}
+  constructor(
+    @Inject(DI.JwtVerifier)
+    private readonly jwt: JwtVerifierPort,
+  ) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const req = context.switchToHttp().getRequest<Request>();
+  async canActivate(ctx: ExecutionContext): Promise<boolean> {
+    const req = ctx.switchToHttp().getRequest<AppRequest>();
 
-    const authHeader = req.headers['authorization'];
-    const token = this.extractBearerToken(typeof authHeader === 'string' ? authHeader : undefined);
-    if (!token) throw new UnauthorizedException();
+    const token = extractBearer(req);
+    if (!token) throw new UnauthorizedException('Missing token');
 
-    let claims: JwtAccessClaims;
-    try {
-      claims = await this.verifier.verifyAccessToken({ token });
-    } catch (e: any) {
-      throw new UnauthorizedException('Invalid or expired token');
-    }
+    const claims = await this.jwt.verifyAccessToken({ token });
 
-    if (!claims?.sub) throw new UnauthorizedException();
-
-    // On garde ça simple: on colle les claims sur req pour les handlers downstream
-    (req as any).auth = { userId: claims.sub, claims };
+    // a ameliorer...
+    req.requestContext = {
+      ...(req.requestContext ?? {
+        requestId: 'missing',
+        correlationId: 'missing',
+      }),
+      isGuest: false,
+      userId: claims.sub,
+    };
 
     return true;
   }
+}
 
-  private extractBearerToken(header: string | undefined): string | null {
-    const value = (header ?? '').trim();
-    if (!value.toLowerCase().startsWith('bearer ')) return null;
-    const token = value.slice(7).trim();
-    return token.length ? token : null;
-  }
+function extractBearer(req: Request): string | null {
+  const h = req.header('authorization') ?? '';
+  const m = /^Bearer\s+(.+)$/i.exec(h);
+  return m?.[1] ?? null;
 }
